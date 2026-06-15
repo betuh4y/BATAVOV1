@@ -1139,7 +1139,7 @@
       // check existing
       const existing = activeSaleItems.find(i => i.codigo === barcode);
       if (existing) {
-        if (existing.quantidade + quantidade > effectiveStock) { toast('Estoque insuficiente.'); return; }
+
         existing.quantidade += quantidade;
         existing.preco = productsDatabase[productCode].preco * existing.quantidade;
         updateActiveSaleDisplay();
@@ -1150,7 +1150,7 @@
       preco = product.preco * quantidade;
     }
 
-    if (quantidade > effectiveStock) { toast('Quantidade excede o estoque.'); return; }
+
     activeSaleItems = activeSaleItems.filter(i => i.codigo !== barcode);
     activeSaleItems.push({ numero: activeSaleItems.length+1, codigo: barcode, nome: product.nome, preco, quantidade, unidade: product.unidade, categoria: product.categoria });
     updateActiveSaleDisplay();
@@ -1173,7 +1173,7 @@
     if (newQty <= 0) { removeItemFromActiveSale(numero); return; }
     const productCode = getProductCode(item.codigo);
     const effStock = isEditingSale ? (adjustedStock[productCode]||productsDatabase[productCode].estoque) : productsDatabase[productCode].estoque;
-    if (newQty > effStock) { toast('Estoque insuficiente.'); return; }
+
     item.quantidade = newQty;
     item.preco = productsDatabase[productCode].preco * newQty;
     activeSaleItems[idx] = item;
@@ -1372,8 +1372,9 @@
           <span class="badge ${payBadge}">${s.tipoPagamento}</span>
           ${s.items?.length?`<span style="font-size:12px;color:var(--gray-400);">${s.items.length} item${s.items.length>1?'s':''}</span>`:''}
         </div>
-        ${s.items?.length?`<div style="margin-top:8px;font-size:12px;color:var(--gray-600);">${s.items.map(i=>`${i.nome} (${i.unidade==='kilo'?(i.quantidade*1000).toFixed(0)+'g':i.quantidade+' un'})`).join(', ')}</div>`:''}
-        <div style="display:flex;gap:6px;margin-top:10px;">
+        ${s.items?.length?`<div style="margin-top:8px;font-size:12px;color:var(--gray-600);">${s.items.map(i=>`${i.nome} (${i.unidade==='kilo'?(i.quantidade*1000).toFixed(0)+'g':(i.quantidade||1)+' un'})`).join(', ')}</div>`:''}
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm" style="background:var(--blue-light);color:var(--blue);" onclick="downloadSalePdf('${s.id}')">⬇ PDF</button>
           <button class="btn btn-sm btn-outline" onclick="editSale('${s.id}')">Editar</button>
           <button class="btn btn-sm" style="background:var(--red-light);color:var(--red);" onclick="deleteSale('${s.id}')">Excluir</button>
         </div>
@@ -1487,6 +1488,15 @@
     img.src = url;
   }
 
+  window.downloadSalePdf = id => {
+    const user = auth.currentUser;
+    if (!user) return;
+    onValue(ref(db, `vendas/${user.uid}/${id}`), snap => {
+      if (!snap.exists()) { toast('Venda não encontrada.'); return; }
+      printReceipt(snap.val(), 0);
+    }, { onlyOnce: true });
+  };
+
   function printReceipt(sale, amountGiven) {
     getBase64Image('https://pbs.twimg.com/media/GxNeFuNXYAA_PVA?format=jpg&name=large', imgData => {
       const { jsPDF } = window.jspdf;
@@ -1498,7 +1508,7 @@
       doc.text(`Data: ${new Date(sale.dataVenda).toLocaleString('pt-BR')}`, margin, y);
       if (sale.clienteNome) { y+=8; doc.text(`Cliente: ${sale.clienteNome}`, margin, y); }
       y+=8; doc.text('-'.repeat(40), margin, y); y+=8;
-      const rows = sale.items.map(i => [`${i.nome} (${i.unidade==='kilo'?(i.quantidade*1000).toFixed(0)+'g':i.quantidade+' un'})`, `R$ ${i.preco.toFixed(2).replace('.',',')}`]);
+      const rows = (sale.items||[]).map(i => [`${i.nome} (${i.unidade==='kilo'?(i.quantidade*1000).toFixed(0)+'g':(i.quantidade||1)+' un'})`, `R$ ${(i.preco||0).toFixed(2).replace('.',',')}`]);
       doc.autoTable({ body:rows, startY:y, margin:{left:margin,right:margin}, styles:{fontSize:11,cellPadding:1}, columnStyles:{0:{cellWidth:'auto'},1:{cellWidth:'auto',halign:'right'}}, theme:'plain' });
       y = doc.lastAutoTable.finalY + 6;
       doc.text('-'.repeat(40), margin, y); y+=8;
@@ -1509,7 +1519,12 @@
       if (sale.observacoes && sale.observacoes!=='Venda PDV') { doc.text(`Obs.: ${sale.observacoes}`, margin, y); y+=8; }
       doc.text('Obrigado!', doc.internal.pageSize.getWidth()/2, y+8, {align:'center'}); y+=16;
       doc.setFontSize(9);
-      doc.text('Av. Nápoles, 57 - Rio Doce (Em frente à Igreja Maranata)', doc.internal.pageSize.getWidth()/2, y, {align:'center'}); y+=6;
+      const addr1 = 'RUA ESMERALDA N 102, JARDIM ATLÂNTICO, OLINDA - PE';
+      const addr2 = 'CEP 53060-740';
+      const addr3 = 'Em frente à Igreja Assembleia de Deus, próximo Varejão Santana';
+      doc.text(addr1, doc.internal.pageSize.getWidth()/2, y, {align:'center'}); y+=5;
+      doc.text(addr2, doc.internal.pageSize.getWidth()/2, y, {align:'center'}); y+=5;
+      doc.text(addr3, doc.internal.pageSize.getWidth()/2, y, {align:'center'}); y+=6;
       const wText = 'WhatsApp: (81) 98904-2431'; const tw = doc.getTextWidth(wText);
       const cx = (doc.internal.pageSize.getWidth()-tw)/2;
       doc.text(wText, cx, y); doc.link(cx, y-5, tw, 8, {url:'https://wa.me/5581989042431'});
